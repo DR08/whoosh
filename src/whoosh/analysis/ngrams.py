@@ -52,19 +52,21 @@ class NgramTokenizer(Tokenizer):
 
     __inittypes__ = dict(minsize=int, maxsize=int)
 
-    def __init__(self, minsize, maxsize=None):
+    def __init__(self, minsize, maxsize=None, reduce_for_query=True):
         """
         :param minsize: The minimum size of the N-grams.
         :param maxsize: The maximum size of the N-grams. If you omit
             this parameter, maxsize == minsize.
+        :param reduce_for_query: If true, queries will only use the largest length ngrams for the query length 
         """
 
         self.min = minsize
         self.max = maxsize or minsize
+        self.reduce_for_query = reduce_for_query
 
     def __eq__(self, other):
         if self.__class__ is other.__class__:
-            if self.min == other.min and self.max == other.max:
+            if self.min == other.min and self.max == other.max and self.reduce_for_query == other.reduce_for_query:
                 return True
         return False
 
@@ -77,7 +79,7 @@ class NgramTokenizer(Tokenizer):
         t = Token(positions, chars, removestops=removestops, mode=mode)
         pos = start_pos
 
-        if mode == "query":
+        if mode == "query" and self.reduce_for_query:
             size = min(self.max, inlen)
             for start in xrange(0, inlen - size + 1):
                 end = start + size
@@ -128,7 +130,7 @@ class NgramFilter(Filter):
 
     __inittypes__ = dict(minsize=int, maxsize=int)
 
-    def __init__(self, minsize, maxsize=None, at=None):
+    def __init__(self, minsize, maxsize=None, at=None, reduce_for_query=True):
         """
         :param minsize: The minimum size of the N-grams.
         :param maxsize: The maximum size of the N-grams. If you omit this
@@ -136,10 +138,12 @@ class NgramFilter(Filter):
         :param at: If 'start', only take N-grams from the start of each word.
             if 'end', only take N-grams from the end of each word. Otherwise,
             take all N-grams from the word (the default).
+        :param reduce_for_query: If true, queries will only use the largest length ngrams for the query length
         """
 
         self.min = minsize
         self.max = maxsize or minsize
+        self.reduce_for_query = reduce_for_query
         self.at = 0
         if at == "start":
             self.at = -1
@@ -148,7 +152,8 @@ class NgramFilter(Filter):
 
     def __eq__(self, other):
         return other and self.__class__ is other.__class__\
-        and self.min == other.min and self.max == other.max
+            and self.min == other.min and self.max == other.max and \
+            self.at == other.at and self.reduce_for_query == other.reduce_for_query
 
     def __call__(self, tokens):
         assert hasattr(tokens, "__iter__")
@@ -165,7 +170,7 @@ class NgramFilter(Filter):
             # so we'll leave the token's original position
             # untouched.
 
-            if t.mode == "query":
+            if t.mode == "query" and self.reduce_for_query:
                 size = min(self.max, len(t.text))
                 if at == -1:
                     t.text = text[:size]
@@ -220,7 +225,7 @@ class NgramFilter(Filter):
 
 # Analyzers
 
-def NgramAnalyzer(minsize, maxsize=None):
+def NgramAnalyzer(minsize, maxsize=None, **kwargs):
     """Composes an NgramTokenizer and a LowercaseFilter.
 
     >>> ana = NgramAnalyzer(4)
@@ -228,10 +233,10 @@ def NgramAnalyzer(minsize, maxsize=None):
     ["hi t", "i th", " the", "ther", "here"]
     """
 
-    return NgramTokenizer(minsize, maxsize=maxsize) | LowercaseFilter()
+    return NgramTokenizer(minsize, maxsize=maxsize, **kwargs) | LowercaseFilter()
 
 
-def NgramWordAnalyzer(minsize, maxsize=None, tokenizer=None, at=None):
+def NgramWordAnalyzer(minsize, maxsize=None, tokenizer=None, **kwargs):
     if not tokenizer:
         tokenizer = RegexTokenizer()
-    return tokenizer | LowercaseFilter() | NgramFilter(minsize, maxsize, at=at)
+    return tokenizer | LowercaseFilter() | NgramFilter(minsize, maxsize, **kwargs)
